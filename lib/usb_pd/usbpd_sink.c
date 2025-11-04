@@ -983,6 +983,55 @@ static void usbpd_sink_state_process(void) {
             pd_control_g.pd_state = PD_STATE_IDLE;
             break;
         }
+
+        case PD_STATE_SEND_VDM_NAK_DISCOVER_IDENTITY: {
+            USBPD_MessageHeader_t header = {0};
+            header.MessageHeader.MessageID = pd_control_g.sink_message_id;
+            header.MessageHeader.MessageType = USBPD_DATA_MSG_VENDOR_DEFINED;
+            header.MessageHeader.SpecificationRevision = pd_control_g.pd_version;
+            header.MessageHeader.PortDataRole = pd_control_g.port_data_role;
+            header.MessageHeader.NumberOfDataObjects = 1;
+
+            USBPD_StructuredVDMHeader_t vdm_header = {0};
+            vdm_header.StructuredVDMHeader.Command = 1;         // Discover Identity
+            vdm_header.StructuredVDMHeader.CommandType = 0b10;  // NAK
+            vdm_header.StructuredVDMHeader.ObjectPosition = 0;
+            vdm_header.StructuredVDMHeader.StructuredVDMVersionMinor = 0;
+            vdm_header.StructuredVDMHeader.StructuredVDMVersionMajor = 0;
+            vdm_header.StructuredVDMHeader.VDMType = 1;
+            vdm_header.StructuredVDMHeader.SVID = 0xFF00;
+
+            *(uint16_t *)&usbpd_tx_buffer[0] = header.d16;
+            *(uint32_t *)&usbpd_tx_buffer[2] = vdm_header.d32;
+
+            usbpd_sink_phy_send_data(usbpd_tx_buffer, (2 + 4), UPD_SOP0);
+            pd_control_g.pd_state = PD_STATE_IDLE;
+            break;
+        }
+        case PD_STATE_SEND_VDM_NAK_DISCOVER_SVIDS: {
+            USBPD_MessageHeader_t header = {0};
+            header.MessageHeader.MessageID = pd_control_g.sink_message_id;
+            header.MessageHeader.MessageType = USBPD_DATA_MSG_VENDOR_DEFINED;
+            header.MessageHeader.SpecificationRevision = pd_control_g.pd_version;
+            header.MessageHeader.PortDataRole = pd_control_g.port_data_role;
+            header.MessageHeader.NumberOfDataObjects = 1;
+
+            USBPD_StructuredVDMHeader_t vdm_header = {0};
+            vdm_header.StructuredVDMHeader.Command = 2;         // Discover SVIDs
+            vdm_header.StructuredVDMHeader.CommandType = 0b10;  // NAK
+            vdm_header.StructuredVDMHeader.ObjectPosition = 0;
+            vdm_header.StructuredVDMHeader.StructuredVDMVersionMinor = 0;
+            vdm_header.StructuredVDMHeader.StructuredVDMVersionMajor = 0;
+            vdm_header.StructuredVDMHeader.VDMType = 1;
+            vdm_header.StructuredVDMHeader.SVID = 0xFF00;
+
+            *(uint16_t *)&usbpd_tx_buffer[0] = header.d16;
+            *(uint32_t *)&usbpd_tx_buffer[2] = vdm_header.d32;
+
+            usbpd_sink_phy_send_data(usbpd_tx_buffer, (2 + 4), UPD_SOP0);
+            pd_control_g.pd_state = PD_STATE_IDLE;
+            break;
+        }
         default: {
             break;
         }
@@ -1132,8 +1181,19 @@ static void usbpd_sink_protocol_analysis_sop0(const uint8_t *rx_buffer, uint8_t 
                     pd_printf("  Command Type: %d\n", vdm_header.StructuredVDMHeader.CommandType);
                     pd_printf("  Command: %d\n", vdm_header.StructuredVDMHeader.Command);
 
-                    if (vdm_header.StructuredVDMHeader.VDMType == 1) {  // 1 = Structured VDM
-                        // MIPPS
+                    // VDMType = 1 (Structured VDM)
+                    if (vdm_header.StructuredVDMHeader.VDMType == 1) {
+                        //  VDM REQ
+                        if (vdm_header.StructuredVDMHeader.Command == 1 && vdm_header.StructuredVDMHeader.CommandType == 0) {  // REQ DISCOVER_IDENTITY
+                            pd_control_g.pd_state = PD_STATE_SEND_VDM_NAK_DISCOVER_IDENTITY;
+                            break;
+                        }
+                        if (vdm_header.StructuredVDMHeader.Command == 2 && vdm_header.StructuredVDMHeader.CommandType == 0) {  // REQ DISCOVER_SVIDS
+                            pd_control_g.pd_state = PD_STATE_SEND_VDM_NAK_DISCOVER_SVIDS;
+                            break;
+                        }
+
+                        // MIPPS VDM ACK
                         if (vdm_header.StructuredVDMHeader.Command == 1 && vdm_header.StructuredVDMHeader.CommandType == 1) {  // ACK DISCOVER_IDENTITY
                             pd_control_g.pd_state = MIPPS_STATE_SEND_VDM_REQ_DISCOVER_SVIDS;
                             break;
@@ -1149,7 +1209,10 @@ static void usbpd_sink_protocol_analysis_sop0(const uint8_t *rx_buffer, uint8_t 
                             pd_control_g.pd_state = PD_STATE_IDLE;
                             break;
                         }
-                    } else {
+                    }
+
+                    // VDMType = 0 (Unstructured VDM)
+                    if (vdm_header.StructuredVDMHeader.VDMType == 0) {
                         // MIPPS
                         if (pd_control_g.pd_state == MIPPS_STATE_WAIT_VDM_1) {
                             pd_control_g.pd_state = MIPPS_STATE_SEND_VDM_2;
