@@ -37,9 +37,10 @@ void usbpd_rdo_build_avs(USBPD_RDO_t *rdo, uint8_t position, uint16_t voltage_mv
  * @param rdo RDO 数据
  * @param message_id 消息 ID
  * @param pd_version PD 版本
+ * @param port_data_role 端口数据角色
  * @return 发送数据长度（字节）
  */
-uint8_t usbpd_rdo_format_spr_request(uint8_t *buffer, const USBPD_RDO_t *rdo, uint8_t message_id, USBPD_SpecificationRevision_t pd_version);
+uint8_t usbpd_rdo_format_spr_request(uint8_t *buffer, const USBPD_RDO_t *rdo, uint8_t message_id, USBPD_SpecificationRevision_t pd_version, uint8_t port_data_role);
 
 /**
  * @brief 格式化 EPR 模式请求 (USBPD_DATA_MSG_EPR_REQUEST)
@@ -47,6 +48,8 @@ uint8_t usbpd_rdo_format_spr_request(uint8_t *buffer, const USBPD_RDO_t *rdo, ui
  * @param rdo RDO 数据
  * @param pdo_raw PDO 原始数据（副本）
  * @param message_id 消息 ID
+ * @param pd_version PD 版本
+ * @param port_data_role 端口数据角色
  * @return 发送数据长度（字节）
  */
-uint8_t usbpd_rdo_format_epr_request(uint8_t *buffer, const USBPD_RDO_t *rdo, uint32_t pdo_raw, uint8_t message_id);
+uint8_t usbpd_rdo_format_epr_request(uint8_t *buffer, const USBPD_RDO_t *rdo, uint32_t pdo_raw, uint8_t message_id, USBPD_SpecificationRevision_t pd_version, uint8_t port_data_role);

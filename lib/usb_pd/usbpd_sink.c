@@ -7,13 +7,12 @@
 #include "utils_print.h"
 #include "utils_delay.h"
 
-/******************************************************************************
- * Static Variables
- *****************************************************************************/
-
 static pd_control_t pd_control_g;
 static uint8_t usbpd_rx_buffer[USBPD_DATA_MAX_LEN] __attribute__((aligned(4)));
 static uint8_t usbpd_tx_buffer[USBPD_DATA_MAX_LEN] __attribute__((aligned(4)));
+
+void USBPD_IRQHandler(void) __attribute__((interrupt("WCH-Interrupt-fast")));
+void TIM3_IRQHandler(void) __attribute__((interrupt("WCH-Interrupt-fast")));
 
 /******************************************************************************
  * Basic Function
@@ -142,39 +141,6 @@ static void usbpd_sink_phy_send_data(const uint8_t *tx_buffer, uint8_t tx_length
     usbpd_sink_rx_mode();
 }
 
-static void usbpd_sink_send_goodcrc(uint8_t message_id, bool is_cable) {
-    USBPD_MessageHeader_t header = {0};
-    header.MessageHeader.MessageType = USBPD_CONTROL_MSG_GOODCRC;
-    header.MessageHeader.PortDataRole = pd_control_g.port_data_role;
-    header.MessageHeader.SpecificationRevision = pd_control_g.pd_version;
-    header.MessageHeader.PortPowerRole_CablePlug = is_cable;  // Cable Plug
-    header.MessageHeader.MessageID = message_id;              // GoodCRC 回复相同的 MessageID
-    header.MessageHeader.NumberOfDataObjects = 0;
-    header.MessageHeader.Extended = 0;
-
-    *(uint16_t *)&usbpd_tx_buffer[0] = header.d16;
-    usbpd_sink_phy_send_data(usbpd_tx_buffer, 2, is_cable ? UPD_SOP1 : UPD_SOP0);
-
-    // 在发送 SOP0 类型 GoodCRC 后，重置定时器
-    if (!is_cable) {
-        pd_control_g.epr_keepalive_timer = 0;
-        pd_control_g.pps_periodic_timer = 0;
-    }
-}
-
-void usbpd_sink_hard_reset(void) {
-    usbpd_sink_phy_send_data(usbpd_tx_buffer, 0, UPD_HARD_RESET);
-    usbpd_sink_state_reset();
-}
-
-bool usbpd_sink_get_ready(void) {
-    return pd_control_g.is_ready;
-}
-
-bool usbpd_sink_get_epr_ready(void) {
-    return pd_control_g.is_epr_ready;
-}
-
 /******************************************************************************
  * Initialization Function
  *****************************************************************************/
@@ -236,6 +202,31 @@ void usbpd_sink_init(void) {
 // VDM_ACK_DISCOVER_SVIDS
 // SEND_EPR_ENTER
 // SEND_EPR_SRC_CAP_REQ_CHUNK
+
+static void usbpd_sink_send_goodcrc(uint8_t message_id, bool is_cable) {
+    USBPD_MessageHeader_t header = {0};
+    header.MessageHeader.MessageType = USBPD_CONTROL_MSG_GOODCRC;
+    header.MessageHeader.PortDataRole = pd_control_g.port_data_role;
+    header.MessageHeader.SpecificationRevision = pd_control_g.pd_version;
+    header.MessageHeader.PortPowerRole_CablePlug = is_cable;  // Cable Plug
+    header.MessageHeader.MessageID = message_id;              // GoodCRC 回复相同的 MessageID
+    header.MessageHeader.NumberOfDataObjects = 0;
+    header.MessageHeader.Extended = 0;
+
+    *(uint16_t *)&usbpd_tx_buffer[0] = header.d16;
+    usbpd_sink_phy_send_data(usbpd_tx_buffer, 2, is_cable ? UPD_SOP1 : UPD_SOP0);
+
+    // 在发送 SOP0 类型 GoodCRC 后，重置定时器
+    if (!is_cable) {
+        pd_control_g.epr_keepalive_timer = 0;
+        pd_control_g.pps_periodic_timer = 0;
+    }
+}
+
+void usbpd_sink_hard_reset(void) {
+    usbpd_sink_phy_send_data(usbpd_tx_buffer, 0, UPD_HARD_RESET);
+    usbpd_sink_state_reset();
+}
 
 static void usbpd_sink_epr_keep_alive(void) {
     // 检查是否已进入 EPR 模式
@@ -367,10 +358,10 @@ static bool usbpd_sink_request(uint8_t position) {
     // 格式化请求
     uint8_t length;
     if (pd_control_g.is_epr_ready) {
-        length = usbpd_rdo_format_epr_request(usbpd_tx_buffer, &rdo, pdo->raw, pd_control_g.sink_message_id);
+        length = usbpd_rdo_format_epr_request(usbpd_tx_buffer, &rdo, pdo->raw, pd_control_g.sink_message_id, pd_control_g.pd_version, pd_control_g.port_data_role);
         pd_printf("Sending EPR request: Pos=%d, RDO=0x%08x, PDO=0x%08x\n", position, rdo.d32, pdo->raw);
     } else {
-        length = usbpd_rdo_format_spr_request(usbpd_tx_buffer, &rdo, pd_control_g.sink_message_id, pd_control_g.pd_version);
+        length = usbpd_rdo_format_spr_request(usbpd_tx_buffer, &rdo, pd_control_g.sink_message_id, pd_control_g.pd_version, pd_control_g.port_data_role);
         pd_printf("Sending SPR request: Pos=%d, RDO=0x%08x\n", position, rdo.d32);
     }
 
@@ -1403,7 +1394,6 @@ static void usbpd_sink_protocol_analysis_sop1(const uint8_t *rx_buffer, uint8_t 
  * Interrupt Handler
  *****************************************************************************/
 
-void USBPD_IRQHandler(void) __attribute__((interrupt("WCH-Interrupt-fast")));
 void USBPD_IRQHandler(void) {
     if (USBPD->STATUS & IF_RX_ACT) {
         USBPD->STATUS |= IF_RX_ACT;
@@ -1429,7 +1419,6 @@ void USBPD_IRQHandler(void) {
     }
 }
 
-void TIM3_IRQHandler(void) __attribute__((interrupt("WCH-Interrupt-fast")));
 void TIM3_IRQHandler(void) {
     TIM_ClearITPendingBit(TIM3, TIM_IT_Update);
 
@@ -1558,4 +1547,12 @@ bool usbpd_sink_get_current_pdo_type(USBPD_PDO_Type_t *pdo_type, USBPD_APDO_Subt
         }
     }
     return false;
+}
+
+bool usbpd_sink_get_ready(void) {
+    return pd_control_g.is_ready;
+}
+
+bool usbpd_sink_get_epr_ready(void) {
+    return pd_control_g.is_epr_ready;
 }

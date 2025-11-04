@@ -38,12 +38,13 @@ void usbpd_rdo_build_avs(USBPD_RDO_t *rdo, uint8_t position, uint16_t voltage_mv
  * 请求消息格式化函数
  *****************************************************************************/
 
-uint8_t usbpd_rdo_format_spr_request(uint8_t *buffer, const USBPD_RDO_t *rdo, uint8_t message_id, USBPD_SpecificationRevision_t pd_version) {
+uint8_t usbpd_rdo_format_spr_request(uint8_t *buffer, const USBPD_RDO_t *rdo, uint8_t message_id, USBPD_SpecificationRevision_t pd_version, uint8_t port_data_role) {
     USBPD_MessageHeader_t header = {0};
     header.MessageHeader.MessageID = message_id;
     header.MessageHeader.MessageType = USBPD_DATA_MSG_REQUEST;
     header.MessageHeader.NumberOfDataObjects = 1;
     header.MessageHeader.SpecificationRevision = pd_version;
+    header.MessageHeader.PortDataRole = port_data_role;
 
     buffer[0] = header.d16 & 0xFF;
     buffer[1] = (header.d16 >> 8) & 0xFF;
@@ -55,12 +56,13 @@ uint8_t usbpd_rdo_format_spr_request(uint8_t *buffer, const USBPD_RDO_t *rdo, ui
     return 6;  // 返回数据长度
 }
 
-uint8_t usbpd_rdo_format_epr_request(uint8_t *buffer, const USBPD_RDO_t *rdo, uint32_t pdo_raw, uint8_t message_id) {
+uint8_t usbpd_rdo_format_epr_request(uint8_t *buffer, const USBPD_RDO_t *rdo, uint32_t pdo_raw, uint8_t message_id, USBPD_SpecificationRevision_t pd_version, uint8_t port_data_role) {
     USBPD_MessageHeader_t header = {0};
     header.MessageHeader.MessageType = USBPD_DATA_MSG_EPR_REQUEST;
     header.MessageHeader.NumberOfDataObjects = 2;
     header.MessageHeader.MessageID = message_id;
-    header.MessageHeader.SpecificationRevision = USBPD_SPECIFICATION_REV3;
+    header.MessageHeader.SpecificationRevision = pd_version;
+    header.MessageHeader.PortDataRole = port_data_role;
 
     buffer[0] = header.d16 & 0xFF;
     buffer[1] = (header.d16 >> 8) & 0xFF;
