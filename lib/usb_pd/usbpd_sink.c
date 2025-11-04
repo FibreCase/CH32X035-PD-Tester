@@ -980,7 +980,7 @@ static void usbpd_sink_state_process(void) {
             *(uint16_t *)&usbpd_tx_buffer[0] = header.d16;
 
             usbpd_sink_phy_send_data(usbpd_tx_buffer, 2, UPD_SOP0);
-            pd_control_g.pd_state = PD_STATE_IDLE;
+            pd_control_g.pd_state = MIPPS_STATE_WAIT_SRC_CAP;
             break;
         }
 
@@ -1634,4 +1634,80 @@ bool usbpd_sink_get_ready(void) {
 
 bool usbpd_sink_get_epr_ready(void) {
     return pd_control_g.is_epr_ready;
+}
+
+bool usbpd_sink_find_max_power_pdo(uint8_t *position, uint16_t *voltage_mv, bool *is_fpdo) {
+    if (pd_control_g.available_pdos.pdo_count == 0) {
+        return false;
+    }
+
+    uint32_t max_power = 0;
+    *position = 0;
+    *voltage_mv = 0;
+    *is_fpdo = false;
+
+    for (uint8_t i = 0; i < pd_control_g.available_pdos.pdo_count; i++) {
+        const pd_pdo_t *pdo = &pd_control_g.available_pdos.pdo[i];
+        uint32_t power = 0;
+
+        switch (pdo->pdo_type) {
+            case PDO_TYPE_FIXED_SUPPLY:
+                if (pdo->fixed.voltage <= CONFIG_HW_MAX_VOLTAGE) {
+                    power = (uint32_t)pdo->fixed.voltage * pdo->fixed.current;
+                    if (power > max_power) {
+                        max_power = power;
+                        *position = pdo->position;
+                        *voltage_mv = pdo->fixed.voltage;
+                        *is_fpdo = true;
+                    }
+                }
+                break;
+            case PDO_TYPE_APDO:
+                if (pdo->apdo_subtype == APDO_TYPE_SPR_PPS) {
+                    if (pdo->pps.max_voltage <= CONFIG_HW_MAX_VOLTAGE) {
+                        power = (uint32_t)pdo->pps.max_voltage * pdo->pps.current;
+                        if (power > max_power) {
+                            max_power = power;
+                            *position = pdo->position;
+                            *voltage_mv = pdo->pps.max_voltage;
+                            *is_fpdo = false;
+                        }
+                    }
+                } else if (pdo->apdo_subtype == APDO_TYPE_EPR_AVS) {
+                    if (pdo->epr_avs.max_voltage <= CONFIG_HW_MAX_VOLTAGE) {
+                        power = (uint32_t)pdo->epr_avs.pdp * 1000;
+                        if (power > max_power) {
+                            max_power = power;
+                            *position = pdo->position;
+                            *voltage_mv = pdo->epr_avs.max_voltage;
+                            *is_fpdo = false;
+                        }
+                    }
+                } else if (pdo->apdo_subtype == APDO_TYPE_SPR_AVS) {
+                    if (15000 <= CONFIG_HW_MAX_VOLTAGE) {
+                        uint32_t p = (uint32_t)15000 * pdo->spr_avs.max_current_9v_15v;
+                        if (p > max_power) {
+                            max_power = p;
+                            *position = pdo->position;
+                            *voltage_mv = 15000;
+                            *is_fpdo = false;
+                        }
+                    }
+                    if (20000 <= CONFIG_HW_MAX_VOLTAGE) {
+                        uint32_t p = (uint32_t)20000 * pdo->spr_avs.max_current_15v_20v;
+                        if (p > max_power) {
+                            max_power = p;
+                            *position = pdo->position;
+                            *voltage_mv = 20000;
+                            *is_fpdo = false;
+                        }
+                    }
+                }
+                break;
+            default:
+                break;
+        }
+    }
+
+    return *position != 0;
 }

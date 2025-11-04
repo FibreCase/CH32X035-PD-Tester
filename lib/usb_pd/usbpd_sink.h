@@ -139,6 +139,7 @@ typedef enum {
     MIPPS_STATE_WAIT_VDM_7,  // TODO: 可能需要 drswap 回来再发 get_src_cap
 
     MIPPS_STATE_SEND_GET_SRC_CAP,
+    MIPPS_STATE_WAIT_SRC_CAP,
 
     PD_STATE_IDLE,
 } pd_state_t;
@@ -250,8 +251,11 @@ bool usbpd_sink_get_current_pdo_type(USBPD_PDO_Type_t *pdo_type, USBPD_APDO_Subt
 bool usbpd_sink_get_current_pdo_type(USBPD_PDO_Type_t *pdo_type, USBPD_APDO_Subtype_t *apdo_subtype);
 
 /**
- * @brief 查找指定电压的 pdo position
- * @param voltage_mv 电压 (mV)
- * @return uint8_t position (1-based), 如果未找到则返回 0
+ * @brief 查找功率最高的 PDO
+ * @param position 返回 PDO 的位置 (1-based)
+ * @param voltage_mv 返回 PDO 的电压 (mV)，对于 APDO，返回其最高电压
+ * @param is_fpdo 返回是否是 Fixed Supply PDO
+ * @return true 找到
+ * @return false 未找到
  */
-uint8_t usbpd_sink_find_pdo_position_by_voltage(uint16_t voltage_mv);
+bool usbpd_sink_find_max_power_pdo(uint8_t *position, uint16_t *voltage_mv, bool *is_fpdo);
