@@ -1096,6 +1096,17 @@ static void usbpd_sink_protocol_analysis_sop0(const uint8_t *rx_buffer, uint8_t 
                     usbpd_sink_state_reset();
                     break;
                 }
+                case USBPD_CONTROL_MSG_REJECT: {
+                    // MIPPS
+                    // 在发送 DRSwap 后，如果收到 REJECT 回复
+                    if (pd_control_g.pd_state == MIPPS_STATE_WAIT_DRSWAP_ACCEPT) {
+                        pd_control_g.port_data_role = 0;
+                        pd_control_g.pd_state = PD_STATE_IDLE;
+                        break;
+                    }
+                    pd_control_g.pd_state = PD_STATE_IDLE;
+                    break;
+                }
                 case USBPD_CONTROL_MSG_NOT_SUPPORTED: {
                     // 在发送 EPR MODE Enter 后，如果收到 NOT_SUPPORTED 回复，则认为不支持 EPR
                     if (pd_control_g.pd_state == PD_STATE_WAIT_EPR_ENTER_RESPONSE) {
