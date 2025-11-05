@@ -1116,7 +1116,16 @@ static void usbpd_sink_protocol_analysis_sop0(const uint8_t *rx_buffer, uint8_t 
                     if (pd_control_g.pd_state == PD_STATE_WAIT_EPR_ENTER_RESPONSE) {
                         pd_control_g.cable_epr_capable = 0;
                         pd_control_g.source_epr_capable = 0;
+                        pd_control_g.pd_state = PD_STATE_IDLE;
+                        break;
                     }
+
+                    // 在发送 MIPPS 非结构化 VDM 后，如果收到 NOT_SUPPORTED 回复，则直接发送 GET_SRC_CAP
+                    if (pd_control_g.pd_state >= MIPPS_STATE_WAIT_VDM_1 && pd_control_g.pd_state <= MIPPS_STATE_WAIT_VDM_7) {
+                        pd_control_g.pd_state = MIPPS_STATE_SEND_GET_SRC_CAP;
+                        break;
+                    }
+
                     pd_control_g.pd_state = PD_STATE_IDLE;
                     break;
                 }
