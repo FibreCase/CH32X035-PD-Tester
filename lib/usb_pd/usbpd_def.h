@@ -128,6 +128,27 @@ typedef enum {
     ExtendedMessageType_VendorDefinedExtended = 0b11110,
 } USBPD_ExtendedMessageType_t;
 
+typedef enum {
+    VDM_TYPE_UNSTRUCTURED = 0,  // 0 = Unstructured VDM
+    VDM_TYPE_STRUCTURED = 1,    // 1 = Structured VDM
+} USBPD_VDMType_t;
+
+typedef enum {
+    VDM_COMMAND_TYPE_REQ = 0b00,   // 00b = REQ (Request from Initiator Port)
+    VDM_COMMAND_TYPE_ACK = 0b01,   // 01b = ACK (Acknowledge Response from Responder Port)
+    VDM_COMMAND_TYPE_NAK = 0b10,   // 10b = NAK (Negative Acknowledge Response from Responder Port)
+    VDM_COMMAND_TYPE_BUSY = 0b11,  // 11b = BUSY (Busy Response from Responder Port)
+} USBPD_StructuredVDMCommandType_t;
+
+typedef enum {
+    VDM_COMMAND_DISCOVER_IDENTITY = 1,  // 1 = Discover Identity
+    VDM_COMMAND_DISCOVER_SVIDS = 2,     // 2 = Discover SVIDs
+    VDM_COMMAND_DISCOVER_MODES = 3,     // 3 = Discover Modes
+    VDM_COMMAND_ENTER_MODE = 4,         // 4 = Enter Mode
+    VDM_COMMAND_EXIT_MODE = 5,          // 5 = Exit Mode
+    VDM_COMMAND_ATTENTION = 6,          // 6 = Attention
+} USBPD_StructuredVDMCommand_t;
+
 // Table 6.29 Structured VDM Header
 typedef union {
     uint32_t d32;

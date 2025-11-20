@@ -1200,45 +1200,53 @@ static void usbpd_sink_protocol_analysis_sop0(const uint8_t *rx_buffer, uint8_t 
                     pd_printf("SOP0 VDM:\n");
                     pd_printf("  Header: 0x%08x\n", vdm_header.d32);
                     pd_printf("  SVID: 0x%04x\n", vdm_header.StructuredVDMHeader.SVID);
-                    pd_printf("  Type: %d\n", vdm_header.StructuredVDMHeader.VDMType);
+                    pd_printf("  VDMType: %d\n", vdm_header.StructuredVDMHeader.VDMType);
                     pd_printf("  Version: %d %d\n", vdm_header.StructuredVDMHeader.StructuredVDMVersionMajor, vdm_header.StructuredVDMHeader.StructuredVDMVersionMinor);
-                    pd_printf("  Object Position: %d\n", vdm_header.StructuredVDMHeader.ObjectPosition);
-                    pd_printf("  Command Type: %d\n", vdm_header.StructuredVDMHeader.CommandType);
+                    pd_printf("  ObjectPosition: %d\n", vdm_header.StructuredVDMHeader.ObjectPosition);
+                    pd_printf("  CommandType: %d\n", vdm_header.StructuredVDMHeader.CommandType);
                     pd_printf("  Command: %d\n", vdm_header.StructuredVDMHeader.Command);
 
-                    // VDMType = 1 (Structured VDM)
-                    if (vdm_header.StructuredVDMHeader.VDMType == 1) {
-                        //  VDM REQ
-                        if (vdm_header.StructuredVDMHeader.Command == 1 && vdm_header.StructuredVDMHeader.CommandType == 0) {  // REQ DISCOVER_IDENTITY
-                            pd_control_g.pd_state = PD_STATE_SEND_VDM_NAK_DISCOVER_IDENTITY;
-                            break;
-                        }
-                        if (vdm_header.StructuredVDMHeader.Command == 2 && vdm_header.StructuredVDMHeader.CommandType == 0) {  // REQ DISCOVER_SVIDS
-                            pd_control_g.pd_state = PD_STATE_SEND_VDM_NAK_DISCOVER_SVIDS;
-                            break;
-                        }
-
-                        // MIPPS VDM ACK
-                        if (vdm_header.StructuredVDMHeader.Command == 1 && vdm_header.StructuredVDMHeader.CommandType == 1) {  // ACK DISCOVER_IDENTITY
-                            pd_control_g.pd_state = MIPPS_STATE_SEND_VDM_REQ_DISCOVER_SVIDS;
-                            break;
-                        }
-                        if (vdm_header.StructuredVDMHeader.Command == 2 && vdm_header.StructuredVDMHeader.CommandType == 1) {  // ACK DISCOVER_SVIDS
-                            // 判断 SVID
-                            uint16_t svid = *(uint16_t *)&rx_buffer[8];
-                            pd_printf("  SVID: 0x%04x\n", svid);
-                            if (svid == 0x2717) {
-                                pd_control_g.pd_state = MIPPS_STATE_SEND_VDM_1;
+                    // Structured VDM
+                    if (vdm_header.StructuredVDMHeader.VDMType == VDM_TYPE_STRUCTURED) {
+                        // REQ
+                        if (vdm_header.StructuredVDMHeader.CommandType == VDM_COMMAND_TYPE_REQ) {
+                            if (vdm_header.StructuredVDMHeader.Command == VDM_COMMAND_DISCOVER_IDENTITY) {
+                                pd_control_g.pd_state = PD_STATE_SEND_VDM_NAK_DISCOVER_IDENTITY;
                                 break;
                             }
-                            pd_printf("MIPPS: Unknown SVID 0x%04x, jumping to IDLE state\n", svid);
+                            if (vdm_header.StructuredVDMHeader.Command == VDM_COMMAND_DISCOVER_SVIDS) {
+                                pd_control_g.pd_state = PD_STATE_SEND_VDM_NAK_DISCOVER_SVIDS;
+                                break;
+                            }
+                        }
+                        // ACK
+                        if (vdm_header.StructuredVDMHeader.CommandType == VDM_COMMAND_TYPE_ACK) {
+                            if (vdm_header.StructuredVDMHeader.Command == VDM_COMMAND_DISCOVER_IDENTITY) {
+                                pd_control_g.pd_state = MIPPS_STATE_SEND_VDM_REQ_DISCOVER_SVIDS;
+                                break;
+                            }
+                            if (vdm_header.StructuredVDMHeader.Command == VDM_COMMAND_DISCOVER_SVIDS) {
+                                // 判断 SVID
+                                uint16_t svid = *(uint16_t *)&rx_buffer[8];
+                                pd_printf("  SVID: 0x%04x\n", svid);
+                                if (svid == 0x2717) {
+                                    pd_control_g.pd_state = MIPPS_STATE_SEND_VDM_1;
+                                    break;
+                                }
+                                pd_printf("MIPPS: Unknown SVID 0x%04x, jumping to IDLE state\n", svid);
+                                pd_control_g.pd_state = PD_STATE_IDLE;
+                                break;
+                            }
+                        }
+                        // NAK
+                        if (vdm_header.StructuredVDMHeader.CommandType == VDM_COMMAND_TYPE_NAK) {
                             pd_control_g.pd_state = PD_STATE_IDLE;
                             break;
                         }
                     }
 
-                    // VDMType = 0 (Unstructured VDM)
-                    if (vdm_header.StructuredVDMHeader.VDMType == 0) {
+                    // Unstructured VDM
+                    if (vdm_header.StructuredVDMHeader.VDMType == VDM_TYPE_UNSTRUCTURED) {
                         // MIPPS
                         if (pd_control_g.pd_state == MIPPS_STATE_WAIT_VDM_1) {
                             pd_control_g.pd_state = MIPPS_STATE_SEND_VDM_2;
@@ -1270,7 +1278,8 @@ static void usbpd_sink_protocol_analysis_sop0(const uint8_t *rx_buffer, uint8_t 
                         }
                     }
 
-                    pd_control_g.pd_state = PD_STATE_SEND_NOT_SUPPORTED;
+                    // Unhandled vdm type — jumping to IDLE state
+                    pd_control_g.pd_state = PD_STATE_IDLE;
                     break;
                 }
                 default: {
