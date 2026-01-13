@@ -7,6 +7,14 @@
 static u8g2_t u8g2;
 static const u8g2_cb_t *rotation = &u8g2_cb_r0;
 
+#ifdef CONFIG_BOARD_VARIANT_X
+static const int base_x = 4;
+static const int base_y = 4;
+#else
+static const int base_x = 0;
+static const int base_y = 0;
+#endif
+
 /**
  * @brief 格式化毫单位值（通用）
  * @param buf 输出缓冲区
@@ -47,16 +55,21 @@ void draw_inverted_str(int x, int y, const char *s) {
  */
 void app_ui_init(void) {
     // 初始化 U8G2
+#ifdef CONFIG_BOARD_VARIANT_X
+    u8g2_Setup_ssd1306_i2c_72x40_er_f(&u8g2, rotation, u8x8_byte_hw_i2c, u8x8_gpio_and_delay);
+#else
     u8g2_Setup_ssd1306_i2c_64x32_1f_f(&u8g2, rotation, u8x8_byte_hw_i2c, u8x8_gpio_and_delay);
+#endif
+
     u8g2_InitDisplay(&u8g2);
     u8g2_SetPowerSave(&u8g2, 0);
-    u8g2_SetContrast(&u8g2, 50);
+    u8g2_SetContrast(&u8g2, 100);
     u8g2_ClearBuffer(&u8g2);
     u8g2_SetFont(&u8g2, u8g2_font_6x10_mr);
 
     // 绘制初始静态内容
-    u8g2_DrawStr(&u8g2, 0, 10, "VBUS");
-    u8g2_DrawStr(&u8g2, 20, 25, "<");
+    u8g2_DrawStr(&u8g2, base_x + 0, base_y + 10, "VBUS");
+    u8g2_DrawStr(&u8g2, base_x + 20, base_y + 25, "<");
     ui_display_data_t ui_data = {0};
     app_ui_update(&ui_data);
     u8g2_SendBuffer(&u8g2);
@@ -99,26 +112,26 @@ void app_ui_update(const ui_display_data_t *ui_display_data) {
 
     // 更新 VBUS 电压
     format_milli_value(buf, sizeof(buf), ui_display_data->vbus_voltage_mv, 'V');
-    u8g2_DrawStr(&u8g2, 28, 10, buf);
+    u8g2_DrawStr(&u8g2, base_x + 28, base_y + 10, buf);
 
     // 更新协商电压
     format_milli_value(buf, sizeof(buf), ui_display_data->negotiate_voltage_mv, 'V');
     if (ui_display_data->is_edit_mode) {
-        draw_inverted_str(28, 20, buf);
+        draw_inverted_str(base_x + 28, base_y + 20, buf);
     } else {
-        u8g2_DrawStr(&u8g2, 28, 20, buf);
+        u8g2_DrawStr(&u8g2, base_x + 28, base_y + 20, buf);
     }
 
     // 更新模式名称/描述
     if (strlen(ui_display_data->mode_name) > 0) {
         if (strlen(ui_display_data->mode_desc) > 0) {
-            u8g2_DrawStr(&u8g2, 0, 20, ui_display_data->mode_name);
-            u8g2_DrawStr(&u8g2, 0, 30, ui_display_data->mode_desc);
+            u8g2_DrawStr(&u8g2, base_x + 0, base_y + 20, ui_display_data->mode_name);
+            u8g2_DrawStr(&u8g2, base_x + 0, base_y + 30, ui_display_data->mode_desc);
         } else {
-            u8g2_DrawStr(&u8g2, 0, 25, ui_display_data->mode_name);
+            u8g2_DrawStr(&u8g2, base_x + 0, base_y + 25, ui_display_data->mode_name);
         }
     } else {
-        u8g2_DrawStr(&u8g2, 0, 25, "N/A");
+        u8g2_DrawStr(&u8g2, base_x + 0, base_y + 25, "N/A");
     }
 
     // 更新协商电流/功率
@@ -129,7 +142,7 @@ void app_ui_update(const ui_display_data_t *ui_display_data) {
         format_milli_value(buf, sizeof(buf), ui_display_data->negotiate_current_ma, 'A');
     }
 
-    u8g2_DrawStr(&u8g2, 28, 30, buf);
+    u8g2_DrawStr(&u8g2, base_x + 28, base_y + 30, buf);
     u8g2_SendBuffer(&u8g2);
 }
 

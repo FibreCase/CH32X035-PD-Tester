@@ -35,11 +35,23 @@ static button_obj_t btns[] = {
 static uint8_t read_key_state(struct button_obj_t *btn) {
     switch (btn->key_id) {
         case BTN_LEFT:
-            return GPIO_ReadInputDataBit(GPIOB, GPIO_Pin_1);
-        case BTN_RIGHT:
-            return GPIO_ReadInputDataBit(GPIOB, GPIO_Pin_3);
-        case BTN_DOWN:
+#ifdef CONFIG_BOARD_VARIANT_X
             return GPIO_ReadInputDataBit(GPIOB, GPIO_Pin_11);
+#else
+            return GPIO_ReadInputDataBit(GPIOB, GPIO_Pin_1);
+#endif
+        case BTN_RIGHT:
+#ifdef CONFIG_BOARD_VARIANT_X
+            return GPIO_ReadInputDataBit(GPIOB, GPIO_Pin_1);
+#else
+            return GPIO_ReadInputDataBit(GPIOB, GPIO_Pin_3);
+#endif
+        case BTN_DOWN:
+#ifdef CONFIG_BOARD_VARIANT_X
+            return GPIO_ReadInputDataBit(GPIOB, GPIO_Pin_3);
+#else
+            return GPIO_ReadInputDataBit(GPIOB, GPIO_Pin_11);
+#endif
         default:
             return 0;
     }
