@@ -124,10 +124,10 @@ void app_control_init(void) {
         delay_ms(1);
     }
 
-    // 检测 DCP
+    // 检测 BC1.2
     if (g_power_state.power_mode == POWER_MODE_NONE) {
-        usb_qc_type_t qc_type = usb_qc_check();
-        if (qc_type == USB_QC_TYPE_DCP) {
+        usb_bc_type_t bc_type = usb_bc_check();
+        if (bc_type == USB_BC_TYPE_DCP) {
             g_power_state.power_mode = POWER_MODE_QC2;
         }
     }

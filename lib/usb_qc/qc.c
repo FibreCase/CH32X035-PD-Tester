@@ -108,8 +108,8 @@ void usb_qc_request(usb_qc_voltage_t voltage) {
     }
 }
 
-usb_qc_type_t usb_qc_check(void) {
-    delay_ms(350);
+usb_bc_type_t usb_bc_check(void) {
+    delay_ms(300);
 
     /* 在 DP 上输出 0.6V 左右的电压，然后检测 DM 的电平状态 */
     dm_set(USB_QC_DP_DM_VOLTAGE_0V0);
@@ -118,7 +118,7 @@ usb_qc_type_t usb_qc_check(void) {
 
     /* 如果 DM 电平呈现 0 状态，则说明供电端（Source）的 DM、DP 没有短接，可以判定 Source 为 SDP，否则 Source 为 DCP 或者 CDP */
     if (dm_get() == 0) {
-        return USB_QC_TYPE_SDP;
+        return USB_BC_TYPE_SDP;
     }
 
     /* 在 DM 数据线上输出 0.6V 左右的电压，然后检测 DP 的电平状态 */
@@ -128,14 +128,8 @@ usb_qc_type_t usb_qc_check(void) {
 
     /* 如果 DP 电平呈现 0 状态，则说明供电端（Source）为虚短状态，判断 Source 为 CDP，否则 Source 为 DCP */
     if (dp_get() == 0) {
-        return USB_QC_TYPE_CDP;
+        return USB_BC_TYPE_CDP;
     }
 
-    /* 在 DP 数据线上输出 0.6V 左右的电压，然后检测 DM 的电平状态 */
-    dm_set(USB_QC_DP_DM_VOLTAGE_0V0);
-    dp_set(USB_QC_DP_DM_VOLTAGE_0V6);
-    delay_ms(135);
-
-    /* 在 DP 上输出 0.6V 左右的电压，等待 DMDP 的短接释放，现象为 DP 电平为 0.6V，DM 下降到 0V。此时说明 BC1.2 运行成功 */
-    return (dm_get() == 0) ? USB_QC_TYPE_BC : USB_QC_TYPE_DCP;
+    return USB_BC_TYPE_DCP;
 }
