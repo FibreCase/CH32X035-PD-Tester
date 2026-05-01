@@ -306,8 +306,23 @@ static bool usbpd_sink_request(uint8_t position) {
     }
 
     if (pdo == NULL) {
-        pd_printf("usbpd_sink_request: PDO position %d not found\n", position);
-        return false;
+        pd_printf("usbpd_sink_request: PDO position %d not found, fallback to position 1\n", position);
+
+        position = 1;
+        pd_control_g.pdo_pos = position;
+        pd_control_g.pdo_voltage_mv = 0;
+
+        for (uint8_t i = 0; i < pd_control_g.available_pdos.pdo_count; i++) {
+            if (pd_control_g.available_pdos.pdo[i].position == position) {
+                pdo = &pd_control_g.available_pdos.pdo[i];
+                break;
+            }
+        }
+
+        if (pdo == NULL) {
+            pd_printf("usbpd_sink_request: fallback PDO position 1 not found\n");
+            return false;
+        }
     }
 
     // 构建 RDO

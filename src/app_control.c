@@ -20,6 +20,8 @@ static power_state_t g_power_state = {
 // APDO 电压记忆（使用 position 作为索引，最多支持 11 个 PDO）
 static uint16_t g_apdo_voltage_memory[12] = {0};  // position 1-11，索引 0 不使用
 
+static bool is_apdo(uint8_t position);
+
 /**
  * @brief 获取 APDO 档位的记忆电压（如果存在）
  * @param position PDO position (1-based)
@@ -30,6 +32,47 @@ static uint16_t get_apdo_memory_voltage(uint8_t position) {
         return g_apdo_voltage_memory[position];
     }
     return 0;
+}
+
+static bool pd_position_exists(uint8_t position) {
+    const pd_available_pdos_t *pdos_ptr = usbpd_sink_get_available_pdos();
+
+    for (uint8_t i = 0; i < pdos_ptr->pdo_count; i++) {
+        if (pdos_ptr->pdo[i].position == position) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+static void sync_pd_ui_position(void) {
+    if (g_power_state.power_mode != POWER_MODE_PD) {
+        return;
+    }
+
+    if (pd_position_exists(g_power_state.pd_position)) {
+        return;
+    }
+
+    uint8_t fallback_position = usbpd_sink_get_position();
+    if (!pd_position_exists(fallback_position)) {
+        const pd_available_pdos_t *pdos_ptr = usbpd_sink_get_available_pdos();
+        fallback_position = pdos_ptr->pdo_count > 0 ? pdos_ptr->pdo[0].position : 0;
+    }
+
+    if (fallback_position == 0) {
+        g_power_state.is_edit_mode = false;
+        g_power_state.edit_voltage = 0;
+        return;
+    }
+
+    g_power_state.pd_position = fallback_position;
+
+    if (!is_apdo(g_power_state.pd_position)) {
+        g_power_state.is_edit_mode = false;
+        g_power_state.edit_voltage = 0;
+    }
 }
 
 /**
@@ -415,6 +458,9 @@ void app_control_handle_button(button_event_t event) {
  */
 power_state_t app_control_get_power_state(void) {
     power_state_t state = {0};
+    memcpy(&state, &g_power_state, sizeof(power_state_t));
+
+    sync_pd_ui_position();
     memcpy(&state, &g_power_state, sizeof(power_state_t));
 
     // 读取 VBUS 电压
