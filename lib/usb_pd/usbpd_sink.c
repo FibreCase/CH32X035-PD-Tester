@@ -116,6 +116,38 @@ static void usbpd_sink_state_reset(void) {
     pd_control_g.mipps_is_drswap_requested = 0;
 }
 
+static void usbpd_sink_soft_reset_recover(void) {
+    // Soft Reset 仅重置协议层和会话协商上下文，不应断开物理连接
+    pd_control_g.is_ready = false;
+
+    // 重置状态机到等待下一轮协商
+    pd_control_g.pd_state = PD_STATE_IDLE;
+    pd_control_g.pd_last_state = PD_STATE_IDLE;
+
+    // 清理已协商能力，等待 Source 重新发送 Source_Capabilities
+    pd_control_g.pdo_pos = 1;
+    pd_control_g.pdo_voltage_mv = 0;
+    pd_control_g.available_pdos.pdo_count = 0;
+    pd_control_g.spr_source_cap_buffer_pdo_count = 0;
+    pd_control_g.epr_source_cap_buffer_pdo_count = 0;
+    pd_control_g.epr_source_cap_buffer_size = 0;
+    pd_control_g.epr_source_cap_buffer_chunk_number = 0;
+
+    // Soft Reset 后消息 ID 计数器重置
+    pd_control_g.sink_message_id = 0;
+
+    // 退出 EPR 相关上下文，后续由新的 Source_Capabilities 重新判断
+    pd_control_g.is_epr_ready = false;
+    pd_control_g.source_epr_capable = false;
+    pd_control_g.cable_epr_capable = true;
+
+    // 重置相关定时器与 MIPPS 流程标记
+    pd_control_g.epr_keepalive_timer = 0;
+    pd_control_g.pps_periodic_timer = 0;
+    pd_control_g.mipps_timeout_timer = 0;
+    pd_control_g.mipps_is_drswap_requested = 0;
+}
+
 static void usbpd_sink_phy_send_data(const uint8_t *tx_buffer, uint8_t tx_length, uint8_t sop) {
     delay_us(90);  // 确保 GoodCRC 已发送
 
@@ -1098,7 +1130,19 @@ static void usbpd_sink_protocol_analysis_sop0(const uint8_t *rx_buffer, uint8_t 
                     break;
                 }
                 case USBPD_CONTROL_MSG_SOFT_RESET: {
-                    usbpd_sink_state_reset();
+                    USBPD_MessageHeader_t _header = {0};
+                    pd_control_g.pd_version = header.MessageHeader.SpecificationRevision;
+                    usbpd_sink_soft_reset_recover();
+
+                    _header.MessageHeader.MessageType = USBPD_CONTROL_MSG_ACCEPT;
+                    _header.MessageHeader.PortDataRole = pd_control_g.port_data_role;
+                    _header.MessageHeader.SpecificationRevision = pd_control_g.pd_version;
+                    _header.MessageHeader.MessageID = pd_control_g.sink_message_id;
+                    _header.MessageHeader.NumberOfDataObjects = 0;
+                    _header.MessageHeader.Extended = 0;
+
+                    *(uint16_t *)&usbpd_tx_buffer[0] = _header.d16;
+                    usbpd_sink_phy_send_data(usbpd_tx_buffer, 2, UPD_SOP0);
                     break;
                 }
                 case USBPD_CONTROL_MSG_REJECT: {
@@ -1221,21 +1265,22 @@ static void usbpd_sink_protocol_analysis_sop0(const uint8_t *rx_buffer, uint8_t 
                         }
                         // ACK
                         if (vdm_header.StructuredVDMHeader.CommandType == VDM_COMMAND_TYPE_ACK) {
+                            // 判断 SVID
+                            uint16_t svid = *(uint16_t *)&rx_buffer[8];
+                            pd_printf("  SVID: 0x%04x\n", svid);
+                            if (svid != 0x2717) {
+                                pd_printf("MIPPS: Unknown SVID 0x%04x, jumping to IDLE state\n", svid);
+                                // pd_control_g.pd_state = PD_STATE_IDLE;
+                                pd_control_g.pd_state = MIPPS_STATE_SEND_GET_SRC_CAP;
+                                break;
+                            }
+
                             if (vdm_header.StructuredVDMHeader.Command == VDM_COMMAND_DISCOVER_IDENTITY) {
                                 pd_control_g.pd_state = MIPPS_STATE_SEND_VDM_REQ_DISCOVER_SVIDS;
                                 break;
                             }
                             if (vdm_header.StructuredVDMHeader.Command == VDM_COMMAND_DISCOVER_SVIDS) {
-                                // 判断 SVID
-                                uint16_t svid = *(uint16_t *)&rx_buffer[8];
-                                pd_printf("  SVID: 0x%04x\n", svid);
-                                if (svid == 0x2717) {
-                                    pd_control_g.pd_state = MIPPS_STATE_SEND_VDM_1;
-                                    break;
-                                }
-                                pd_printf("MIPPS: Unknown SVID 0x%04x, jumping to IDLE state\n", svid);
-                                // pd_control_g.pd_state = PD_STATE_IDLE;
-                                pd_control_g.pd_state = MIPPS_STATE_SEND_GET_SRC_CAP;
+                                pd_control_g.pd_state = MIPPS_STATE_SEND_VDM_1;
                                 break;
                             }
                         }
@@ -1516,11 +1561,11 @@ void TIM3_IRQHandler(void) {
     }
 
     // tPPSRequest timeout 处理
-    USBPD_PDO_Type_t pdo_type;
-    USBPD_APDO_Subtype_t apdo_subtype;
-    usbpd_sink_get_current_pdo_type(&pdo_type, &apdo_subtype);
+    USBPD_PDO_Type_t pdo_type = PDO_TYPE_FIXED_SUPPLY;
+    USBPD_APDO_Subtype_t apdo_subtype = APDO_TYPE_RESERVED;
+    bool has_current_pdo = usbpd_sink_get_current_pdo_type(&pdo_type, &apdo_subtype);
     // 判断 spr pps
-    if (pdo_type == PDO_TYPE_APDO && apdo_subtype == APDO_TYPE_SPR_PPS && !pd_control_g.is_epr_ready) {
+    if (has_current_pdo && pdo_type == PDO_TYPE_APDO && apdo_subtype == APDO_TYPE_SPR_PPS && !pd_control_g.is_epr_ready) {
         pd_control_g.pps_periodic_timer++;
         if (pd_control_g.pd_state == PD_STATE_IDLE) {
             if (pd_control_g.pps_periodic_timer >= tPPSRequest) {
